@@ -8,8 +8,14 @@ The list of known layers is different for each of supported frameworks. To see t
 Model Optimizer searches for each layer of the input model in the list of known layers before building the model's internal representation, optimizing the model, and producing the Intermediate Representation.
 
 
-_The process behind converting custom layers involves...
-the following steps_
+_The process behind converting custom layers involves..._
+
+    - Registering the custom layers as extensions to the Model Optimizer ( For both TensorFlow and Caffe models)
+    - The second step depends on the original model framework of the custom layer.
+          - For Caffe, the second option is to register the layers as Custom, then use Caffe to calculate the output shape of the layer. You’ll need Caffe on your system to do this option.
+          - For TensorFlow, its second option is to actually replace the unsupported subgraph with a different subgraph. The final TensorFlow option is to actually offload the computation of the subgraph back to TensorFlow during inference.
+
+_steps for implementation_
 
     1. open terminal/CMD and activate the OpenVINO toolkit environment
     2. install prerequesite: pip install cogapp ..
@@ -24,12 +30,8 @@ the following steps_
     8. Compile your C++ code.
     9. Test with Python and/or C++ sample apps.
 
-HANDLING CUSTOM LAYER
+_Some of the potential reasons for handling custom layers are..._
 
-To actually add custom layers, there are a few differences depending on the original model framework. In both TensorFlow and Caffe, the first option is to register the custom layers as extensions to the Model Optimizer.\
-there are unsupported layers for certain hardware, that you may run into when working with the Inference Engine. In this case, there are sometimes extensions available that can add support. for example, the cpu extension for linux in `/opt/intel/openvino/deployment_tools/inference_engine/lib/intel64/libcpu_extension_sse4.so`
-
-_reasons for handling custom layers_
 - a model with custom layer can not be converted successfully into IR with mo. the model optimizer return an error with custom layers name that should be implemented before conversion.
 - If your topology contains layers that are not in the list of known layers for the device, the Inference Engine considers the layer to be unsupported and reports an error. handling custom layers will allow inference ingine to load the network with your model, perform some inference and return the results.
 
@@ -110,9 +112,6 @@ In investigating potential people counter models, I tried each of the following 
   - Model Source : https://github.com/RamanHaivaronski/People-counter/tree/master/mobilenet_ssd
   - I converted the model to an Intermediate Representation with the following arguments... 
 
-        --input_model --input_proto
-  - command:
-
         python /opt/intel/openvino/deployment_tools/model_optimizer/mo.py --input_model MobileNetSSD_deploy.caffemodel --input_proto MobileNetSSD_deploy.prototxt
   - The model was insufficient for the app because... the accuracy of model is not good enough
   - I tried to improve the model for the app during model conversion by... using mo.py with custom values for --mean_values data & --scale but still the problem is not solved
@@ -120,16 +119,15 @@ In investigating potential people counter models, I tried each of the following 
 
 - Model 2: 
   - Name : faster_rcnn_inception_v2_coco
-  - [Model Source] : http://download.tensorflow.org/models/object_detection/faster_rcnn_inception_v2_coco_2018_01_28.tar.gz
+  - Model Source : http://download.tensorflow.org/models/object_detection/faster_rcnn_inception_v2_coco_2018_01_28.tar.gz
+  - I Downloaded the model with the command:
+  
+        wget http://download.tensorflow.org/models/object_detection/faster_rcnn_inception_v2_coco_2018_01_28.tar.gz
+  - I Extracted it using:
+
+        tar -xvf faster_rcnn_inception_v2_coco_2018_01_28.tar.gz
   - I converted the model to an Intermediate Representation with the following arguments...
 
-        --input_model
-        --tensorflow_object_detection_api_pipeline_config
-        --reverse_input_channels
-        --tensorflow_use_custom_operations_config
-
-  - command:
-  
         python /opt/intel/openvino/deployment_tools/model_optimizer/mo.py --input_model model/faster_rcnn_inception_v2_coco/frozen_inference_graph.pb --tensorflow_object_detection_api_pipeline_config pipeline.config --reverse_input_channels --tensorflow_use_custom_operations_config /opt/intel/openvino/deployment_tools/model_optimizer/extensions/front/tf/faster_rcnn_support.json
   - The model was insufficient for the app due to... performance issues e.g slow inference time and hence is not suitable for this edge app.
 
@@ -137,18 +135,18 @@ In investigating potential people counter models, I tried each of the following 
 - Model 3: 
    - Name : SSD MobileNet V2 COCO model
    - Model Source : http://download.tensorflow.org/models/object_detection/ssd_mobilenet_v2_coco_2018_03_29.tar.gz 
-  - I converted the model to an Intermediate Representation with the following arguments...
+   - I Downloaded the model with the command:
+         
+         wget http://download.tensorflow.org/models/object_detection/ssd_mobilenet_v2_coco_2018_03_29.tar.gz
+   - I Extracted it using:
+   
+         tar -xvf ssd_mobilenet_v2_coco_2018_03_29.tar.gz
+   - I converted the model to an Intermediate Representation with the following arguments...
 
-          --input_model
-          --tensorflow_object_detection_api_pipeline_config
-          --reverse_input_channels
-          --tensorflow_use_custom_operations_config
-  - command : 
-        
-        python /opt/intel/openvino/deployment_tools/model_optimizer/mo.py --input_model frozen_inference_graph.pb --tensorflow_object_detection_api_pipeline_config pipeline.config --reverse_input_channels --tensorflow_use_custom_operations_config /opt/intel/openvino/deployment_tools/model_optimizer/extensions/front/tf/ssd_v2_support.json
-  - The model was insufficient for the app because... The model lost some accuracy, it detects people but fails to continuously track them, and this result to false counting result. 
-  - I tried to improve the model for the app by...  by reducing the probablity threshold, changing people counting algorithm, but still unable to detect two people in the video and still i am getting false result in counting.
-  - the performance of this model is much better than the previous models.
+          python /opt/intel/openvino/deployment_tools/model_optimizer/mo.py --input_model frozen_inference_graph.pb --tensorflow_object_detection_api_pipeline_config pipeline.config --reverse_input_channels --tensorflow_use_custom_operations_config /opt/intel/openvino/deployment_tools/model_optimizer/extensions/front/tf/ssd_v2_support.json
+   - The model was insufficient for the app because... The model lost some accuracy, it detects people but fails to continuously track them, and this result to false counting result. 
+   - I tried to improve the model for the app by...  by reducing the probablity threshold, changing people counting algorithm, but still unable to detect two people in the video and still i am getting false result in counting.
+   - the performance of this model is much better than the previous models.
 
 ## Conclusion
  I ended up using pre-trained model: Person-detection-retail-0013 model from OpenVINO model zoo which i found as suitable model for this application.
